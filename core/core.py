@@ -183,20 +183,6 @@ class Spider(object):
         return p.sub('\g<1>', html_content)
 
     def ParseHtmlContent(self, html_content):
-        hitTemplateElem = self.Config.HitTemplate['Element'][0]
-        hitTemplateElem = self._stripWhitespaceAndReturnBeforeParsing(hitTemplateElem)
-
-        templateSoup = BeautifulSoup(hitTemplateElem, self.Config.ParseHtmlContent[
-                                     'BeautifulSoupParser'])
-        if self.Config.ParseHtmlContent['BeautifulSoupParser'] == 'html5lib':
-            templateRootTag = templateSoup.body.contents[0]
-        else:
-            templateRootTag = templateSoup.contents[0]
-
-        if not type(templateRootTag) == element.Tag:
-            # TODO: what do we do for this ?
-            pass
-
         def _searching_helper_func(tag):
             templateVarsCache = {}
             ret = self._censorTagCandidateWithTemplate(tag, templateRootTag, templateVarsCache)
@@ -206,16 +192,32 @@ class Spider(object):
 
             return ret
 
-        htmlContent = self._stripWhitespaceAndReturnBeforeParsing(html_content)
-        htmlSoup = BeautifulSoup(htmlContent, self.Config.ParseHtmlContent['BeautifulSoupParser'])
-        tagCandidates = htmlSoup.find_all(_searching_helper_func)
+        hitTemplateElems = self.Config.HitTemplate['Elements']
 
-        for candiTag in tagCandidates:
-            templateVarsCache = {}
-            self._parseTagRecursive(candiTag, templateRootTag, templateVarsCache)
+        for elem in hitTemplateElems:
+            elem = self._stripWhitespaceAndReturnBeforeParsing(elem)
+            templateSoup = BeautifulSoup(elem, self.Config.ParseHtmlContent['BeautifulSoupParser'])
 
-            if not len(templateVarsCache) == 0:
-                self._mergeTemplateVariablesWithCache(templateVarsCache)
+            if self.Config.ParseHtmlContent['BeautifulSoupParser'] == 'html5lib':
+                templateRootTag = templateSoup.body.contents[0]
+            else:
+                templateRootTag = templateSoup.contents[0]
+
+            if not type(templateRootTag) == element.Tag:
+                # TODO: what do we do for this ?
+                pass
+
+            htmlContent = self._stripWhitespaceAndReturnBeforeParsing(html_content)
+            htmlSoup = BeautifulSoup(htmlContent, self.Config.ParseHtmlContent[
+                                     'BeautifulSoupParser'])
+            tagCandidates = htmlSoup.find_all(_searching_helper_func)
+
+            for candiTag in tagCandidates:
+                templateVarsCache = {}
+                self._parseTagRecursive(candiTag, templateRootTag, templateVarsCache)
+
+                if not len(templateVarsCache) == 0:
+                    self._mergeTemplateVariablesWithCache(templateVarsCache)
 
     def Run(self):
         for url in self.Config.GrabHtmlContent['URLScope']:
