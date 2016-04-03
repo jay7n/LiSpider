@@ -11,9 +11,9 @@ from bs4 import element
 
 import config2 as Config
 
-logging.basicConfig(format='%(asctime)s %(levelname)8s %(message)s')
+logging.basicConfig(format='%(levelname)8s %(message)s')
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.WARNING)
 
 
 class Spider(object):
@@ -62,15 +62,57 @@ class Spider(object):
 
         # TODO
 
+    def _censorNaviStrCandidateWithTemplate(self, candi_str, template_str, template_var_cache):
+        if not type(candi_tag) == element.NavigableString or not type(template_tag) == element.NavigableString:
+            return False
+
+        matchObj = self.RegPattern.search(template_str)
+
+        if matchObj is not None:
+            varName = matchObj.group(1)
+            varValue = None
+
+            subed_tmpl_str = self.RegPattern.sub('(.+)', template_str)
+            reg2 = re.compile(subed_tmpl_str)
+            logger.debug('subed tmpl reg2 =', reg2)
+
+            mo2 = reg2.match(candi_str)
+            if mo2 is not None:
+                varValue = mo2.group(1)
+                self._procTemplateVariable(varName, varValue, template_var_cache)
+            else:
+                return False
+
+        elif not candi_str == template_str:
+            return False
+
+        return True
+
     def _censorTagCandidateWithTemplate(self, candi_tag, template_tag, template_var_cache):
         if not type(candi_tag) == element.Tag or not type(template_tag) == element.Tag:
             return False
 
         if not candi_tag.name == template_tag.name:
+            logger.debug('tag name inequality: \'%s\' is not equal to \'%s\'',
+                         candi_tag.name, template_tag.name)
             return False
 
+        # if candi_tag.name == 'img':
+        #     print candi_tag
+
         for tmpAttrKey, tmpAttrValue in template_tag.attrs.iteritems():
+            # if candi_tag.name == 'img':
+                # print tmpAttrKey, tmpAttrValue
+
+            if tmpAttrValue == '%%':
+                # this means an empty variable,
+                # indicating that it is expected to be ignored.
+                continue
+
             if not candi_tag.has_attr(tmpAttrKey):
+                logger.debug(candi_tag)
+                logger.debug('tag attr not exsits: no attr \'%s\' in \'%s\'',
+                             tmpAttrKey, candi_tag.name)
                 return False
 
             candiAttrValue = candi_tag[tmpAttrKey]
@@ -83,22 +125,25 @@ class Spider(object):
 
             if matchObj is not None:
                 varName = matchObj.group(1)
-
-                # this means '%%', an empty variable,
-                # indicating that it is expected to be ignored.
-                if varName == '':
-                    continue
-
                 varValue = candiAttrValue
+                # print varName, varValue
                 self._procTemplateVariable(varName, varValue, template_var_cache)
 
             elif not tmpAttrValue == candiAttrValue:
+                logger.debug(candi_tag)
+                logger.debug('tag attr inequality: \'%s\' is not equal to \'%s\' in \'%s\'',
+                             tmpAttrValue, candiAttrValue, candi_tag.name)
                 return False
 
         return True
 
     def _parseTagRecursive(self, candi_tag, template_tag, template_var_cache):
         for idx, tmpChild in enumerate(template_tag.contents):
+            if tmpChild.name == 'lisc_pass':
+                # this means <...>,
+                # indicating that anything in this tag is expected to be ignored.
+                continue
+
             if len(candi_tag.contents) <= idx:
                 return False
 
@@ -106,11 +151,24 @@ class Spider(object):
             if isinstance(tmpChild, element.NavigableString) and isinstance(candiChild, element.NavigableString):
                 continue
 
-            valid = self._censorTagCandidateWithTemplate(candiChild, tmpChild, template_var_cache)
+            valid = False
+            typeCandi = type(candiChild)
+            typeTmp = type(tmpChild)
+
+            if typeCandi == typeTmp == element.Tag:
+                valid = self._censorTagCandidateWithTemplate(
+                    candiChild, tmpChild, template_var_cache)
+            elif typeCandi == typeTmp == element.NavigableString:
+                valid = (candiChild == tmpChild)
+
             if valid is True:
                 self._parseTagRecursive(candiChild, tmpChild, template_var_cache)
             else:
-                template_var_cache.clear()
+                if len(template_var_cache) > 0:
+                    logger.debug(candi_tag)
+                    logger.debug('censor not passed. cache will be cleared')
+                    template_var_cache.clear()
+
                 return False
 
         return True
@@ -128,12 +186,16 @@ class Spider(object):
         p = re.compile('\n*\s*(<[^<>]+>)\s*\n*')
         return p.sub('\g<1>', html_content)
 
-    def ParseContent(self, html_content):
+    def ParseHtmlContent(self, html_content):
         hitTemplateElem = self.Config.HitTemplate['Element'][0]
         hitTemplateElem = self._stripWhitespaceAndReturnBeforeParsing(hitTemplateElem)
 
-        templateSoup = BeautifulSoup(hitTemplateElem)
-        templateRootTag = templateSoup.body.contents[0]
+        templateSoup = BeautifulSoup(hitTemplateElem, self.Config.ParseHtmlContent[
+                                     'BeautifulSoupParser'])
+        if self.Config.ParseHtmlContent['BeautifulSoupParser'] == 'html5lib':
+            templateRootTag = templateSoup.body.contents[0]
+        else:
+            templateRootTag = templateSoup.contents[0]
 
         if not type(templateRootTag) == element.Tag:
             # TODO: what do we do for this ?
@@ -148,12 +210,9 @@ class Spider(object):
 
             return ret
 
-        html_content = self._stripWhitespaceAndReturnBeforeParsing(html_content)
-        htmlSoup = BeautifulSoup(html_content, 'html5lib')
-        # tagCandidates = htmlSoup.find_all(name='ul')
+        htmlContent = self._stripWhitespaceAndReturnBeforeParsing(html_content)
+        htmlSoup = BeautifulSoup(htmlContent, self.Config.ParseHtmlContent['BeautifulSoupParser'])
         tagCandidates = htmlSoup.find_all(_searching_helper_func)
-
-        # logger.debug(tagCandidates)
 
         for candiTag in tagCandidates:
             templateVarsCache = {}
@@ -171,15 +230,18 @@ class Spider(object):
                 startPage = int(matchObj.group(1))
                 endPage = int(matchObj.group(2)) + 1
 
+                if startPage > endPage:
+                    startPage, endPage = endPage, startPage
+
                 for page in xrange(startPage, endPage):
                     subed_url = reg.sub(str(page), url)
                     htmlContent = self.GrabHtmlContent(subed_url)
-                    self.ParseContent(htmlContent)
+                    self.ParseHtmlContent(htmlContent)
             else:
                 htmlContent = self.GrabHtmlContent(url)
-                self.ParseContent(htmlContent)
+                self.ParseHtmlContent(htmlContent)
 
-        print self.TemplateVariables['IMG_1']
+        print self.TemplateVariables
 
 if __name__ == "__main__":
     sp = Spider(Config)
