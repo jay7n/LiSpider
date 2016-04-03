@@ -63,7 +63,7 @@ class Spider(object):
         # TODO
 
     def _censorNaviStrCandidateWithTemplate(self, candi_str, template_str, template_var_cache):
-        if not type(candi_tag) == element.NavigableString or not type(template_tag) == element.NavigableString:
+        if not type(candi_str) == element.NavigableString or not type(template_str) == element.NavigableString:
             return False
 
         matchObj = self.RegPattern.search(template_str)
@@ -148,26 +148,22 @@ class Spider(object):
                 return False
 
             candiChild = candi_tag.contents[idx]
-            if isinstance(tmpChild, element.NavigableString) and isinstance(candiChild, element.NavigableString):
-                continue
 
-            valid = False
             typeCandi = type(candiChild)
             typeTmp = type(tmpChild)
 
+            valid = False
             if typeCandi == typeTmp == element.Tag:
-                valid = self._censorTagCandidateWithTemplate(
-                    candiChild, tmpChild, template_var_cache)
+                if self._censorTagCandidateWithTemplate(candiChild, tmpChild, template_var_cache):
+                    valid = self._parseTagRecursive(candiChild, tmpChild, template_var_cache)
             elif typeCandi == typeTmp == element.NavigableString:
-                valid = (candiChild == tmpChild)
+                valid = self._censorNaviStrCandidateWithTemplate(
+                    candiChild, tmpChild, template_var_cache)
 
-            if valid is True:
-                self._parseTagRecursive(candiChild, tmpChild, template_var_cache)
-            else:
-                if len(template_var_cache) > 0:
-                    logger.debug(candi_tag)
-                    logger.debug('censor not passed. cache will be cleared')
-                    template_var_cache.clear()
+            if valid is False and len(template_var_cache) > 0:
+                logger.debug(candi_tag)
+                logger.debug('censor not passed. cache will be cleared')
+                template_var_cache.clear()
 
                 return False
 

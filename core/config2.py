@@ -21,12 +21,12 @@ HitTemplate = {
     ''',
 
     'Element': [
-        # u'''
-        #     <div class="text"><span class="righttext"><a href="%%">48270</a></span><p><a href="%IMG_ORI%" target="_blank" class="view_img_link">[查看原图]</a><br><img src="%IMG%"></p>
-        #         <lisc_pass>
-        #     </div>
-        # ''',
-        #
+        u'''
+            <div class="text"><span class="righttext"><a href="%%">48270</a></span><p><a href="%IMG_ORI%" target="_blank" class="view_img_link">[查看原图]</a><br><img src="%IMG%"></p>
+                <lisc_pass>
+            </div>
+        ''',
+
         u'''
             <div class="author"><strong title="%%">%AUTHOR%</strong>                            <br>
                 <lisc_pass>
