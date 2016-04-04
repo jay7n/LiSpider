@@ -1,4 +1,3 @@
-#!/usr/bin/python
 # -*- coding: utf-8 -*-
 
 import urllib2
@@ -9,19 +8,31 @@ import random
 from bs4 import BeautifulSoup
 from bs4 import element
 
-import config2 as Config
-
 logging.basicConfig(format='%(levelname)8s %(message)s')
 logger = logging.getLogger()
 logger.setLevel(logging.WARNING)
 
 
 class Spider(object):
+    errMsg = {
+        'ConfigBad': 'config for Spider is not good. please check it.'
+    }
 
     def __init__(self, config):
-        self.Config = config
-        self.RegPattern = re.compile('%(\w*)%')
-        self.TemplateVariables = {}
+        if self.CheckConfig(config) is True:
+            self.Config = config
+            self.ConfigGood = True
+            self.RegPattern = re.compile('%(\w*)%')
+            self.TemplateVariables = {}
+        else:
+            logger.error(self.errMsg['ConfigBad'])
+            print self.errMsg['ConfigBad']
+
+            self.ConfigGood = False
+
+    def CheckConfig(self, config):
+        # TODO
+        return True
 
     def GrabHtmlContent(self, url):
         if not url:
@@ -97,13 +108,7 @@ class Spider(object):
                          candi_tag.name, template_tag.name)
             return False
 
-        # if candi_tag.name == 'img':
-        #     print candi_tag
-
         for tmpAttrKey, tmpAttrValue in template_tag.attrs.iteritems():
-            # if candi_tag.name == 'img':
-                # print tmpAttrKey, tmpAttrValue
-
             if tmpAttrValue == '%%':
                 # this means an empty variable,
                 # indicating that it is expected to be ignored.
@@ -220,18 +225,23 @@ class Spider(object):
                     self._mergeTemplateVariablesWithCache(templateVarsCache)
 
     def Run(self):
+        if self.ConfigGood is False:
+            logger.error(self.errMsg['ConfigBad'])
+            print self.errMsg['ConfigBad']
+            return None
+
         for url in self.Config.GrabHtmlContent['URLScope']:
             reg = re.compile('%(\d+)-(\d+)%')
             matchObj = reg.search(url)
 
             if matchObj is not None:
                 startPage = int(matchObj.group(1))
-                endPage = int(matchObj.group(2)) + 1
+                endPage = int(matchObj.group(2))
 
                 if startPage > endPage:
                     startPage, endPage = endPage, startPage
 
-                for page in xrange(startPage, endPage):
+                for page in xrange(startPage, endPage + 1):
                     subed_url = reg.sub(str(page), url)
                     htmlContent = self.GrabHtmlContent(subed_url)
                     self.ParseHtmlContent(htmlContent)
@@ -239,8 +249,6 @@ class Spider(object):
                 htmlContent = self.GrabHtmlContent(url)
                 self.ParseHtmlContent(htmlContent)
 
-        print self.TemplateVariables
+        logger.debug(self.TemplateVariables)
 
-if __name__ == "__main__":
-    sp = Spider(Config)
-    sp.Run()
+        return self.TemplateVariables
