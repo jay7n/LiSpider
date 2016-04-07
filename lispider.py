@@ -1,16 +1,32 @@
 # -*- coding: utf-8 -*-
-
-import urllib2
 import logging
 import re
 import random
+
+# For Python3 Compatibility
+# try Python2 first, then use Python3 otherwise
+try:
+    import urllib2 as urllib
+except ImportError:
+    import urllib.request as urllib
+
+try:
+    xrange = xrange
+except NameError:
+    xrange = range
+
+
+def getDictIterItems(dict):
+    try:
+        return dict.iteritems()
+    except AttributeError:
+        return dict.items()
+# End Python2-3 Compatibility
 
 from bs4 import BeautifulSoup
 from bs4 import element
 
 logging.basicConfig(format='%(levelname)8s %(message)s')
-logger = logging.getLogger()
-logger.setLevel(logging.WARNING)
 
 
 class Spider(object):
@@ -21,12 +37,24 @@ class Spider(object):
     def __init__(self, config):
         if self.CheckConfig(config) is True:
             self.Config = config
-            self.ConfigGood = True
             self.RegPattern = re.compile('%(\w*)%')
             self.TemplateVariables = {}
+
+            loggerLevel = config.Debug['LoggingLevel'] \
+                if config.Debug and 'LoggingLevel' in config.Debug \
+                else 'WARNING'
+
+            self.logger = logging.getLogger()
+            self.logger.setLevel(loggerLevel)
+
+            self.bs4Parser = config.ParseHtmlContent['BeautifulSoupParser'] \
+                if config.ParseHtmlContent and 'BeautifulSoupParser' in config.ParseHtmlContent \
+                else 'html5lib'
+
+            self.ConfigGood = True
         else:
-            logger.error(self.errMsg['ConfigBad'])
-            print self.errMsg['ConfigBad']
+            self.logger.error(self.errMsg['ConfigBad'])
+            print(self.errMsg['ConfigBad'])
 
             self.ConfigGood = False
 
@@ -36,7 +64,7 @@ class Spider(object):
 
     def GrabHtmlContent(self, url):
         if not url:
-            logger.warning('grab html content failed: no url provided.')
+            self.logger.warning('grab html content failed: no url provided.')
             return None
 
         request_counter = [0]
@@ -48,8 +76,8 @@ class Spider(object):
             request_counter[0] += 1
 
             try:
-                req = urllib2.Request(url, headers={'User-Agent': user_agent})
-                con = urllib2.urlopen(req)
+                req = urllib.Request(url, headers={'User-Agent': user_agent})
+                con = urllib.urlopen(req)
                 return con
             except Exception as e:
                 # if forbidden, try it `Config.GrabHtmlContent['MaxTryCount']` more times
@@ -60,7 +88,7 @@ class Spider(object):
 
         if con.code != 200:
             msg = 'grab html content failed: http code returns abnormally'
-            logger.warning(msg)
+            self.logger.warning(msg)
             raise Exception('msg')
 
         return con.read()
@@ -85,7 +113,7 @@ class Spider(object):
 
             subed_tmpl_str = self.RegPattern.sub('(.+)', template_str)
             reg2 = re.compile(subed_tmpl_str)
-            logger.debug('subed tmpl reg2 =', reg2)
+            self.logger.debug('subed tmpl reg2 =', reg2)
 
             mo2 = reg2.match(candi_str)
             if mo2 is not None:
@@ -104,20 +132,20 @@ class Spider(object):
             return False
 
         if not candi_tag.name == template_tag.name:
-            logger.debug('tag name inequality: \'%s\' is not equal to \'%s\'',
-                         candi_tag.name, template_tag.name)
+            self.logger.debug('tag name inequality: \'%s\' is not equal to \'%s\'',
+                              candi_tag.name, template_tag.name)
             return False
 
-        for tmpAttrKey, tmpAttrValue in template_tag.attrs.iteritems():
+        for tmpAttrKey, tmpAttrValue in getDictIterItems(template_tag.attrs):
             if tmpAttrValue == '%%':
                 # this means an empty variable,
                 # indicating that it is expected to be ignored.
                 continue
 
             if not candi_tag.has_attr(tmpAttrKey):
-                logger.debug(candi_tag)
-                logger.debug('tag attr not exsits: no attr \'%s\' in \'%s\'',
-                             tmpAttrKey, candi_tag.name)
+                self.logger.debug(candi_tag)
+                self.logger.debug('tag attr not exsits: no attr \'%s\' in \'%s\'',
+                                  tmpAttrKey, candi_tag.name)
                 return False
 
             candiAttrValue = candi_tag[tmpAttrKey]
@@ -131,20 +159,19 @@ class Spider(object):
             if matchObj is not None:
                 varName = matchObj.group(1)
                 varValue = candiAttrValue
-                # print varName, varValue
                 self._procTemplateVariable(varName, varValue, template_var_cache)
 
             elif not tmpAttrValue == candiAttrValue:
-                logger.debug(candi_tag)
-                logger.debug('tag attr inequality: \'%s\' is not equal to \'%s\' in \'%s\'',
-                             tmpAttrValue, candiAttrValue, candi_tag.name)
+                self.logger.debug(candi_tag)
+                self.logger.debug('tag attr inequality: \'%s\' is not equal to \'%s\' in \'%s\'',
+                                  tmpAttrValue, candiAttrValue, candi_tag.name)
                 return False
 
         return True
 
     def _parseTagRecursive(self, candi_tag, template_tag, template_var_cache):
         for idx, tmpChild in enumerate(template_tag.contents):
-            if tmpChild.name == 'lisc_pass':
+            if tmpChild.name == 'lisp_pass':
                 # this means <...>,
                 # indicating that anything in this tag is expected to be ignored.
                 continue
@@ -166,8 +193,9 @@ class Spider(object):
                     candiChild, tmpChild, template_var_cache)
 
             if valid is False and len(template_var_cache) > 0:
-                logger.debug(candi_tag)
-                logger.debug('censor not passed. cache will be cleared')
+                self.logger.warning(template_tag)
+                self.logger.warning(candi_tag)
+                self.logger.warning('censor not passed. cache will be cleared')
                 template_var_cache.clear()
 
                 return False
@@ -175,7 +203,7 @@ class Spider(object):
         return True
 
     def _mergeTemplateVariablesWithCache(self, template_var_cache):
-        for key, value in template_var_cache.iteritems():
+        for key, value in getDictIterItems(template_var_cache):
             if key in self.TemplateVariables:
                 self.TemplateVariables[key].extend(value)
             else:
@@ -188,6 +216,7 @@ class Spider(object):
         return p.sub('\g<1>', html_content)
 
     def ParseHtmlContent(self, html_content):
+
         def _searching_helper_func(tag):
             templateVarsCache = {}
             ret = self._censorTagCandidateWithTemplate(tag, templateRootTag, templateVarsCache)
@@ -201,9 +230,9 @@ class Spider(object):
 
         for elem in hitTemplateElems:
             elem = self._stripWhitespaceAndReturnBeforeParsing(elem)
-            templateSoup = BeautifulSoup(elem, self.Config.ParseHtmlContent['BeautifulSoupParser'])
+            templateSoup = BeautifulSoup(elem, self.bs4Parser)
 
-            if self.Config.ParseHtmlContent['BeautifulSoupParser'] == 'html5lib':
+            if self.bs4Parser == 'html5lib':
                 templateRootTag = templateSoup.body.contents[0]
             else:
                 templateRootTag = templateSoup.contents[0]
@@ -213,10 +242,9 @@ class Spider(object):
                 pass
 
             htmlContent = self._stripWhitespaceAndReturnBeforeParsing(html_content)
-            htmlSoup = BeautifulSoup(htmlContent, self.Config.ParseHtmlContent[
-                                     'BeautifulSoupParser'])
-            tagCandidates = htmlSoup.find_all(_searching_helper_func)
+            htmlSoup = BeautifulSoup(htmlContent, self.bs4Parser)
 
+            tagCandidates = htmlSoup.find_all(_searching_helper_func)
             for candiTag in tagCandidates:
                 templateVarsCache = {}
                 self._parseTagRecursive(candiTag, templateRootTag, templateVarsCache)
@@ -226,8 +254,8 @@ class Spider(object):
 
     def Run(self):
         if self.ConfigGood is False:
-            logger.error(self.errMsg['ConfigBad'])
-            print self.errMsg['ConfigBad']
+            self.logger.error(self.errMsg['ConfigBad'])
+            print(self.errMsg['ConfigBad'])
             return None
 
         for url in self.Config.GrabHtmlContent['URLScope']:
@@ -243,12 +271,12 @@ class Spider(object):
 
                 for page in xrange(startPage, endPage + 1):
                     subed_url = reg.sub(str(page), url)
-                    htmlContent = self.GrabHtmlContent(subed_url)
+                    htmlContent = self.GrabHtmlContent(subed_url).decode()
                     self.ParseHtmlContent(htmlContent)
             else:
                 htmlContent = self.GrabHtmlContent(url)
                 self.ParseHtmlContent(htmlContent)
 
-        logger.debug(self.TemplateVariables)
+        self.logger.debug(self.TemplateVariables)
 
         return self.TemplateVariables
