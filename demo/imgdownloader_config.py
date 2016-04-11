@@ -17,7 +17,7 @@ HitTemplate = {
 
         u'''
             <div id="comic">
-                <img src="%Img%" title="%Desc%" alt=%%">
+                <img src="%Img%" title="%Desc%" alt="%%">
             </div>
         ''',
     ]
