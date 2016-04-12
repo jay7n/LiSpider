@@ -3,7 +3,8 @@
 # GrabHtmlContent - Mandatory
 GrabHtmlContent = {
     'URLScope': [
-        'http://xkcd.com/%100-105%/'
+        'http://xkcd.com/%706-708%/',
+        'http://xkcd.com/100/',
     ],
     'MaxTryCount': 5
 }
@@ -18,6 +19,7 @@ HitTemplate = {
         u'''
             <div id="comic">
                 <img src="%Img%" title="%Desc%" alt="%%">
+                <lisp_pass>
             </div>
         ''',
     ]
@@ -31,7 +33,7 @@ ParseHtmlContent = {
 
 # Debug - Optional
 Debug = {
-    'LoggingLevel': 'WARNING'
+    'LoggingLevel': 'DEBUG'
 }
 
 
