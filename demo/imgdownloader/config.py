@@ -33,7 +33,7 @@ ParseHtmlContent = {
 
 # Debug - Optional
 Debug = {
-    'LoggingLevel': 'DEBUG'
+    'LoggingLevel': 'WARNING'
 }
 
 
