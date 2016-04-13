@@ -10,7 +10,7 @@ except ImportError:
     import urllib as urllib
 
 from lispider import Spider
-import demo.imgdownloader_config as config
+import demo.imgdownloader.config as config
 
 logger = logging.getLogger()
 
